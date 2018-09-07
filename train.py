@@ -1,4 +1,3 @@
-
 # coding: utf-8
 
 # A Convolutional Network implementation example using TensorFlow library.
@@ -11,7 +10,8 @@
 import os
 from argparse import ArgumentParser
 import tensorflow as tf
-
+from tensorflow.examples.tutorials.mnist import input_data
+import shutil
 
 def build_parser():
     parser = ArgumentParser()
@@ -48,7 +48,7 @@ def check_opts(opts):
     assert opts.learning_rate >= 0, "Please provide a positive learning_rate"
     assert opts.training_iters > 0
     assert opts.batch_size > 0
-    assert opts.display_step >= 0
+    assert opts.display_step > 0
     assert (opts.dropout >= 0 and opts.dropout <= 1.0), "dropout should be between 0.0 and 1.0"
 
 # Parse command line arguments
@@ -59,26 +59,18 @@ check_opts(options)
 
 # Check if GPU is available
 if tf.test.is_gpu_available():
-    print("GPU available.\nSpecs: \n")
-    get_ipython().system('nvidia-smi')
+    print("GPU available.")
 else:
     print("No GPU found... Defaulting to CPU.")
 
-# Import MNIST data
-from tensorflow.examples.tutorials.mnist import input_data
+# Read MNIST data from local dataset
 mnist = input_data.read_data_sets(options.mnist_data, one_hot=True)
-
-# Parameters
-# learning_rate = 0.001
-# training_iters = 200000
-# batch_size = 128
-# display_step = 10
-# dropout = 0.75 # Dropout, probability to keep units
 
 # Network Parameters
 n_input = 784 # MNIST data input (img shape: 28*28)
 n_classes = 10 # MNIST total classes (0-9 digits)
 
+logs_path = '/output/tensorflow_logs/'
 
 # tf Graph input
 x = tf.placeholder(tf.float32, [None, n_input], name="x")
@@ -157,23 +149,41 @@ optimizer = tf.train.AdamOptimizer(learning_rate=options.learning_rate).minimize
 correct_pred = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32), name="accuracy")
 
+# Create a summary to monitor cost tensor
+tf.summary.scalar("loss", cost)
+# Create a summary to monitor accuracy tensor
+tf.summary.scalar("accuracy", accuracy)
+# Merge all summaries into a single op
+merged_summary_op = tf.summary.merge_all()
+
+# Delete ./model dir if exists to avoid SavedModelBuilder error
+if os.path.exists('./model'):
+    shutil.rmtree('./model', ignore_errors=True)
+
 # Initializing the variables
 init = tf.global_variables_initializer()
 builder = tf.saved_model.builder.SavedModelBuilder("./model")
-# TODO: This step throws an error "folder already exists". How do I solve this?
 
 
 # Launch the graph
 with tf.Session() as sess:
     sess.run(init)
+
+    # op to write logs to Tensorboard
+    summary_writer = tf.summary.FileWriter(logs_path, graph=tf.get_default_graph())
+
     step = 1
     # Keep training until reach max iterations
     while step * options.batch_size < options.training_iters:
         batch_x, batch_y = mnist.train.next_batch(options.batch_size)
-        # Run optimization op (backprop)
-        sess.run(optimizer, feed_dict={x: batch_x, y: batch_y,
-                                       keep_prob: options.dropout})
-        if step % options.display_step == 0:
+        # Run optimization op (backprop), cost op (to get loss value) and summary nodes
+        _, c, summary = sess.run([optimizer, cost, merged_summary_op], 
+                                    feed_dict={x: batch_x, y: batch_y, keep_prob: options.dropout})
+
+        # Write logs at every iteration
+        summary_writer.add_summary(summary, step * options.batch_size)
+
+        if step % options.display_step == 0:    
             # Calculate batch loss and accuracy
             loss, acc = sess.run([cost, accuracy], feed_dict={x: batch_x,
                                                               y: batch_y,

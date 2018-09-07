@@ -3,7 +3,6 @@ env: tensorflow-1.5
 task:
     train:
         machine: cpu
-        description: MNIST CNN
         input:
           - source: floydlabs/datasets/mnist/1
             destination: mnist
