@@ -1,7 +1,6 @@
-env: tensorflow-1.5
-
 task:
     train:
+        env: tensorflow-1.5
         machine: cpu
         input:
           - source: floydlabs/datasets/mnist/1
