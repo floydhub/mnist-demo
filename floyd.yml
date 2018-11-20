@@ -1,3 +1,9 @@
+env: tensorflow-1.5
+machine: cpu
+data:
+  - source: floydlabs/datasets/mnist/1
+    destination: mnist
+
 task:
     train:
         env: tensorflow-1.5
